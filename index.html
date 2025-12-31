@@ -135,102 +135,132 @@
   </div>
 
   <script>
-    (function () {
-      const form = document.getElementById('rsvpForm');
-      const submitBtn = document.getElementById('submitBtn');
-      const msgWrap = document.getElementById('formMessage');
-      const endpoint = form.getAttribute('action');
+  (function () {
+    const form = document.getElementById('rsvpForm');
+    const submitBtn = document.getElementById('submitBtn');
+    const msgWrap = document.getElementById('formMessage');
+    const endpoint = form.getAttribute('action');
 
-      function showMessage(type, title, text) {
-        msgWrap.innerHTML = '';
-        const el = document.createElement('div');
-        el.className = 'notice ' + (type === 'success' ? 'success' : 'error');
-        el.innerHTML = '<div style="display:flex;align-items:center;"><span class="spinner" aria-hidden="true" style="display:none"></span></div><div><strong style="display:block;margin-bottom:4px;">' + title + '</strong><div class="muted">' + text + '</div></div>';
-        msgWrap.appendChild(el);
+    function createNotice(type, title, htmlContent) {
+      const el = document.createElement('div');
+      el.className = 'notice ' + (type === 'success' ? 'success' : 'error');
+      el.innerHTML = '<div style="display:flex;align-items:center;"><span class="spinner" aria-hidden="true" style="display:none"></span></div><div><strong style="display:block;margin-bottom:4px;">' + title + '</strong><div class="muted">' + htmlContent + '</div></div>';
+      return el;
+    }
+
+    function setLoading(loading) {
+      if (loading) {
+        submitBtn.disabled = true;
+        submitBtn.dataset.orig = submitBtn.textContent;
+        submitBtn.innerHTML = '<span class="spinner" aria-hidden="true"></span> Sending...';
+      } else {
+        submitBtn.disabled = false;
+        submitBtn.textContent = submitBtn.dataset.orig || 'Find the best wine';
       }
+    }
 
-      function setLoading(loading) {
-        if (loading) {
-          submitBtn.disabled = true;
-          submitBtn.dataset.orig = submitBtn.textContent;
-          submitBtn.innerHTML = '<span class="spinner" aria-hidden="true"></span> Sending...';
+    async function postForm(fd) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 15000);
+      try {
+        const res = await fetch(endpoint, {
+          method: 'POST',
+          // custom header for authentication
+          headers: {
+            'ksquaresrvices': '123456789'
+          },
+          body: fd,
+          signal: controller.signal,
+        });
+        clearTimeout(timeout);
+        return res;
+      } catch (err) {
+        clearTimeout(timeout);
+        throw err;
+      }
+    }
+
+    async function parseResponse(res) {
+      const ct = (res.headers.get('content-type') || '').toLowerCase();
+      try {
+        if (ct.includes('application/json')) {
+          const json = await res.json();
+          return { kind: 'json', value: json };
         } else {
-          submitBtn.disabled = false;
-          submitBtn.textContent = submitBtn.dataset.orig || 'Find the best wine';
+          const text = await res.text();
+          return { kind: 'text', value: text };
         }
+      } catch (err) {
+        return { kind: 'text', value: '' };
+      }
+    }
+
+    // pretty output helper
+    function renderResponseContent(parsed) {
+      if (!parsed) return '';
+      if (parsed.kind === 'json') {
+        // escape and pretty-print JSON
+        const pretty = JSON.stringify(parsed.value, null, 2);
+        return '<pre style="white-space:pre-wrap;max-height:220px;overflow:auto;padding:8px;border-radius:8px;background:#fcfdff;border:1px solid #eef6ff;margin:6px 0;font-size:13px;">' +
+               escapeHtml(pretty) + '</pre>';
+      }
+      // text or empty
+      return '<pre style="white-space:pre-wrap;max-height:220px;overflow:auto;padding:8px;border-radius:8px;background:#fcfdff;border:1px solid #eef6ff;margin:6px 0;font-size:13px;">' +
+             escapeHtml(String(parsed.value || '(no response body)')) + '</pre>';
+    }
+
+    // simple HTML escaper
+    function escapeHtml(str) {
+      return str.replace(/[&<>"']/g, (m) => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+      })[m]);
+    }
+
+    form.addEventListener('submit', async function (e) {
+      e.preventDefault();
+
+      if (!form.checkValidity()) {
+        form.reportValidity();
+        return;
       }
 
-      async function postForm(fd) {
-        // send as FormData to the endpoint, include header authentication
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 15000);
-        try {
-          const res = await fetch(endpoint, {
-            method: 'POST',
-            headers: {
-              // custom header for authentication as requested
-              'ksquaresrvices': '123456789'
-            },
-            body: fd,
-            signal: controller.signal,
-          });
-          clearTimeout(timeout);
-          return res;
-        } catch (err) {
-          clearTimeout(timeout);
-          throw err;
-        }
-      }
+      setLoading(true);
+      msgWrap.innerHTML = '';
+      msgWrap.appendChild(createNotice('info', 'Sending…', 'Please wait while we send your selection.'));
 
-      form.addEventListener('submit', async function (e) {
-        e.preventDefault();
+      const fd = new FormData(form);
 
-        // Basic front-end validation
-        if (!form.checkValidity()) {
-          form.reportValidity();
-          return;
-        }
+      try {
+        const res = await postForm(fd);
+        const parsed = await parseResponse(res);
 
-        setLoading(true);
-        showMessage('info', 'Sending…', 'Please wait while we send your selection.');
+        msgWrap.innerHTML = '';
 
-        const fd = new FormData(form);
-
-        try {
-          const res = await postForm(fd);
-
-          if (res.ok) {
-            // success
-            msgWrap.innerHTML = '';
-            const success = document.createElement('div');
-            success.className = 'notice success';
-            success.innerHTML = '<div style="display:flex;align-items:center;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div><strong style="display:block;margin-bottom:4px;">Success — data sent to the search engine</strong><div class="muted">Thanks. We received your choices and will follow up shortly with confirmation and recommendations.</div></div>';
-            msgWrap.appendChild(success);
-
-            // Optionally clear the form after a short delay (commented to keep user's data if you prefer)
-            // setTimeout(() => form.reset(), 900);
-
-          } else {
-            // server returned an error status
-            msgWrap.innerHTML = '';
-            const err = document.createElement('div');
-            err.className = 'notice error';
-            err.innerHTML = '<div style="display:flex;align-items:center;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 9v4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 17h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M21 12A9 9 0 1 1 3 12a9 9 0 0 1 18 0z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div><strong style="display:block;margin-bottom:4px;">Submission failed</strong><div class="muted">There was a problem submitting your data. Please try again — your entries are preserved.</div></div>';
-            msgWrap.appendChild(err);
-            // keep form values intact
-          }
-        } catch (networkError) {
-          // network / timeout / aborted
-          msgWrap.innerHTML = '';
-          const err = document.createElement('div');
-          err.className = 'notice error';
-          err.innerHTML = '<div style="display:flex;align-items:center;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 9v4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 17h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M21 12A9 9 0 1 1 3 12a9 9 0 0 1 18 0z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div><strong style="display:block;margin-bottom:4px;">Network error</strong><div class="muted">Unable to reach the server. Please check your connection and try again — your entries are preserved.</div></div>';
+        if (res.ok) {
+          const contentHtml = renderResponseContent(parsed);
+          const success = createNotice('success', 'Success — data sent to the search engine', 'Thanks. We received your choices and will follow up shortly with confirmation and recommendations.' + contentHtml);
+          msgWrap.appendChild(success);
+          // optionally clear form: keep commented so data is preserved unless you explicitly want a reset
+          // form.reset();
+        } else {
+          // non-2xx: show server response body if provided
+          const contentHtml = renderResponseContent(parsed);
+          const err = createNotice('error', 'Submission failed — server returned ' + res.status + ' ' + (res.statusText || ''), 'There was a problem submitting your data. Please try again — your entries are preserved.' + contentHtml);
           msgWrap.appendChild(err);
-        } finally {
-          setLoading(false);
         }
-      });
-    })();
+      } catch (networkError) {
+        msgWrap.innerHTML = '';
+        const err = createNotice('error', 'Network error', 'Unable to reach the server. Please check your connection and try again — your entries are preserved.');
+        msgWrap.appendChild(err);
+      } finally {
+        setLoading(false);
+      }
+    });
+  })();
   </script>
 </body>
 
