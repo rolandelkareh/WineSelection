@@ -165,10 +165,6 @@
       try {
         const res = await fetch(endpoint, {
           method: 'POST',
-          // custom header for authentication
-          headers: {
-            'ksquaresrvices': '123456789'
-          },
           body: fd,
           signal: controller.signal,
         });
@@ -264,4 +260,5 @@
   </script>
 </body>
 
-</html>
+  })();
+  </script></body></html>
