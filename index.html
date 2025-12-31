@@ -194,19 +194,28 @@
     })[m]);
   }
 
+  // Render only the webhook output in a clean, professional panel
   function renderResponseContent(parsed) {
     if (!parsed) return '';
+    let contentHtml;
     if (parsed.kind === 'json') {
       const pretty = JSON.stringify(parsed.value, null, 2);
-      return '<pre style="white-space:pre-wrap;max-height:420px;overflow:auto;padding:8px;border-radius:8px;background:#fcfdff;border:1px solid #eef6ff;margin:6px 0;font-size:13px;">' +
-             escapeHtml(pretty) + '</pre>';
+      contentHtml = '<pre style="white-space:pre-wrap;max-height:420px;overflow:auto;padding:12px;border-radius:8px;background:#fcfdff;border:1px solid #eef6ff;margin:8px 0;font-size:13px;">' +
+                    escapeHtml(pretty) + '</pre>';
+    } else {
+      contentHtml = '<pre style="white-space:pre-wrap;max-height:420px;overflow:auto;padding:12px;border-radius:8px;background:#fcfdff;border:1px solid #eef6ff;margin:8px 0;font-size:13px;">' +
+                    escapeHtml(parsed.value || '(no response body)') + '</pre>';
     }
-    // text (may be empty)
-    return '<pre style="white-space:pre-wrap;max-height:420px;overflow:auto;padding:8px;border-radius:8px;background:#fcfdff;border:1px solid #eef6ff;margin:6px 0;font-size:13px;">' +
-           escapeHtml(parsed.value || '(no response body)') + '</pre>';
+
+    // Panel wrapper with a succinct title (no success message)
+    return '<div style="border-radius:10px;padding:14px;background:linear-gradient(180deg,#fff,#fbfdff);border:1px solid #e8f0ff;margin-top:12px;">' +
+           '<div style="font-weight:600;font-size:15px;margin-bottom:8px;color:#0f1724">Webhook response</div>' +
+           contentHtml +
+           '<div style="font-size:12px;color:var(--muted);margin-top:6px">Shown exactly as received from the webhook.</div>' +
+           '</div>';
   }
 
-  // small helper to render a simple notice block (used only for errors/no-body cases)
+  // simple notice for error/status-only cases
   function renderNotice(kind, title, detail) {
     return '<div class="notice ' + (kind === 'success' ? 'success' : 'error') + '"><div><strong style="display:block;margin-bottom:4px;">' +
            escapeHtml(title) + '</strong><div class="muted">' + escapeHtml(detail) + '</div></div></div>';
@@ -221,7 +230,7 @@
     }
 
     setLoading(true);
-    // show a small sending indicator while waiting
+    // sending indicator
     msgWrap.innerHTML = '<div class="notice"><div style="display:flex;align-items:center;"><span class="spinner" aria-hidden="true"></span></div><div><strong style="display:block;margin-bottom:4px;">Sending…</strong><div class="muted">Please wait while we send your selection.</div></div></div>';
 
     const fd = new FormData(form);
@@ -230,31 +239,26 @@
       const res = await postForm(fd);
       const parsed = await parseResponse(res);
 
-      // Clear initial message and show only webhook output
       msgWrap.innerHTML = '';
 
-      // If the webhook returned any body, show only that body.
-      // If body is empty, show a concise notice with the HTTP status.
       const bodyPresent = parsed && (
         (parsed.kind === 'json' && Object.keys(parsed.value || {}).length > 0) ||
         (parsed.kind === 'text' && String(parsed.value).trim().length > 0)
       );
 
       if (bodyPresent) {
-        // show only the response body (no extra "success" text)
+        // display only the webhook response (no extra success text)
         msgWrap.innerHTML = renderResponseContent(parsed);
       } else {
-        // no body: show a short notice including status info
+        // no body: show concise status notice
         if (res.ok) {
-          msgWrap.innerHTML = renderNotice('success', 'Webhook returned no body', 'The webhook responded with status ' + res.status + '. No response body was returned.');
+          msgWrap.innerHTML = renderNotice('success', 'No response body', 'The webhook responded with status ' + res.status + '. No response body was returned.');
         } else {
-          msgWrap.innerHTML = renderNotice('error', 'Webhook returned no body', 'Server responded with status ' + res.status + ' ' + (res.statusText || '') + '. No response body was returned.');
+          msgWrap.innerHTML = renderNotice('error', 'Submission failed', 'Server responded with status ' + res.status + ' ' + (res.statusText || '') + '. No response body was returned.');
         }
       }
-
     } catch (networkError) {
       msgWrap.innerHTML = '';
-      // show fetch/network/CORS error details
       msgWrap.innerHTML = renderNotice('error', 'Network error', 'Unable to reach the server. Details: ' + (networkError && networkError.message ? networkError.message : String(networkError)));
     } finally {
       setLoading(false);
