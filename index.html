@@ -147,7 +147,6 @@
         el.className = 'notice ' + (type === 'success' ? 'success' : 'error');
         el.innerHTML = '<div style="display:flex;align-items:center;"><span class="spinner" aria-hidden="true" style="display:none"></span></div><div><strong style="display:block;margin-bottom:4px;">' + title + '</strong><div class="muted">' + text + '</div></div>';
         msgWrap.appendChild(el);
-        // hide spinner unless loading state set separately
       }
 
       function setLoading(loading) {
@@ -162,12 +161,16 @@
       }
 
       async function postForm(fd) {
-        // send as FormData to the endpoint
+        // send as FormData to the endpoint, include header authentication
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 15000);
         try {
           const res = await fetch(endpoint, {
             method: 'POST',
+            headers: {
+              // custom header for authentication as requested
+              'ksquaresrvices': '123456789'
+            },
             body: fd,
             signal: controller.signal,
           });
@@ -212,18 +215,17 @@
             msgWrap.innerHTML = '';
             const err = document.createElement('div');
             err.className = 'notice error';
-            err.innerHTML = '<div style="display:flex;align-items:center;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 9v4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 17h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M21 12A9 9 0 1 0 3 12a9 9 0 0 0 18 0z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div><strong style="display:block;margin-bottom:4px;">Error — submission failed</strong><div class="muted">Sorry, there was a problem sending your data. Please try again later.</div></div>';
+            err.innerHTML = '<div style="display:flex;align-items:center;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 9v4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 17h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M21 12A9 9 0 1 1 3 12a9 9 0 0 1 18 0z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div><strong style="display:block;margin-bottom:4px;">Submission failed</strong><div class="muted">There was a problem submitting your data. Please try again — your entries are preserved.</div></div>';
             msgWrap.appendChild(err);
+            // keep form values intact
           }
-
-        } catch (err) {
-          // network or other error
-          console.error(err);
+        } catch (networkError) {
+          // network / timeout / aborted
           msgWrap.innerHTML = '';
-          const errMsg = document.createElement('div');
-          errMsg.className = 'notice error';
-          errMsg.innerHTML = '<div style="display:flex;align-items:center;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 9v4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 17h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M21 12A9 9 0 1 0 3 12a9 9 0 0 0 18 0z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div><strong style="display:block;margin-bottom:4px;">Error — submission failed</strong><div class="muted">Sorry, there was a problem sending your data. Please check your connection and try again.</div></div>';
-          msgWrap.appendChild(errMsg);
+          const err = document.createElement('div');
+          err.className = 'notice error';
+          err.innerHTML = '<div style="display:flex;align-items:center;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 9v4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 17h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M21 12A9 9 0 1 1 3 12a9 9 0 0 1 18 0z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div><strong style="display:block;margin-bottom:4px;">Network error</strong><div class="muted">Unable to reach the server. Please check your connection and try again — your entries are preserved.</div></div>';
+          msgWrap.appendChild(err);
         } finally {
           setLoading(false);
         }
