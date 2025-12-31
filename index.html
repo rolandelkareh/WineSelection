@@ -9,6 +9,7 @@
     :root{
       --bg:#f4f6f8; --muted:#7b8694; --accent:#0a66c2; --accent-2:#1b9df0;
       --radius:14px; --shadow:0 6px 24px rgba(16,24,40,0.08);
+      --success:#1f9d55; --danger:#d64545;
     }
     *{box-sizing:border-box} html,body{height:100%}
     body{
@@ -39,6 +40,32 @@
     .ghost{background:transparent;border:1px solid #e6eefc;color:var(--accent)}
     .help{font-size:13px;color:var(--muted)}
     footer{margin-top:16px;color:var(--muted);font-size:13px}
+
+    /* Notices */
+    .notice{
+      border-radius:10px;
+      padding:12px 14px;
+      margin-bottom:12px;
+      display:flex;
+      gap:12px;
+      align-items:flex-start;
+      font-size:14px;
+    }
+    .notice.success{
+      background:linear-gradient(90deg, rgba(31,157,85,0.08), rgba(255,255,255,0.4));
+      border:1px solid rgba(31,157,85,0.12);
+      color:var(--success);
+    }
+    .notice.error{
+      background:linear-gradient(90deg, rgba(214,69,69,0.06), rgba(255,255,255,0.4));
+      border:1px solid rgba(214,69,69,0.12);
+      color:var(--danger);
+    }
+    .notice .muted{color:var(--muted);font-size:13px}
+    .spinner{
+      width:18px;height:18px;border-radius:50%;border:2px solid rgba(0,0,0,0.08);border-top-color:rgba(10,102,194,0.9);animation:spin .9s linear infinite;
+    }
+    @keyframes spin{ to { transform: rotate(360deg); } }
   </style>
 </head>
 <body>
@@ -58,8 +85,12 @@
       <h2 id="title" style="margin:0 0 8px">RSVP — choose your event & meal</h2>
       <p class="help" style="margin:0 0 16px">Select the event type and preferred food category below.</p>
 
-      <form action="https://n8n.ksquareservices.com/webhook-test/wine" method="post" novalidate>
+      <!-- form: JS will handle submit and show messages -->
+      <form id="rsvpForm" action="https://n8n.ksquareservices.com/webhook-test/wine" method="post" novalidate>
         <div>
+          <!-- live region for feedback -->
+          <div id="formMessage" aria-live="polite" aria-atomic="true"></div>
+
           <label for="attendee">Full name
             <input id="attendee" name="name" type="text" placeholder="Jane Doe" autocomplete="name" required>
           </label>
@@ -85,7 +116,7 @@
 
           <div class="actions" style="margin-top:12px">
             <button type="reset" class="btn ghost">Reset</button>
-            <button type="submit" class="btn primary">Find the best wine</button>
+            <button id="submitBtn" type="submit" class="btn primary">Find the best wine</button>
           </div>
         </div>
 
@@ -102,6 +133,103 @@
       <div style="display:flex;gap:12px"><a class="help" href="#">Privacy</a><a class="help" href="#">Terms</a></div>
     </footer>
   </div>
+
+  <script>
+    (function () {
+      const form = document.getElementById('rsvpForm');
+      const submitBtn = document.getElementById('submitBtn');
+      const msgWrap = document.getElementById('formMessage');
+      const endpoint = form.getAttribute('action');
+
+      function showMessage(type, title, text) {
+        msgWrap.innerHTML = '';
+        const el = document.createElement('div');
+        el.className = 'notice ' + (type === 'success' ? 'success' : 'error');
+        el.innerHTML = '<div style="display:flex;align-items:center;"><span class="spinner" aria-hidden="true" style="display:none"></span></div><div><strong style="display:block;margin-bottom:4px;">' + title + '</strong><div class="muted">' + text + '</div></div>';
+        msgWrap.appendChild(el);
+        // hide spinner unless loading state set separately
+      }
+
+      function setLoading(loading) {
+        if (loading) {
+          submitBtn.disabled = true;
+          submitBtn.dataset.orig = submitBtn.textContent;
+          submitBtn.innerHTML = '<span class="spinner" aria-hidden="true"></span> Sending...';
+        } else {
+          submitBtn.disabled = false;
+          submitBtn.textContent = submitBtn.dataset.orig || 'Find the best wine';
+        }
+      }
+
+      async function postForm(fd) {
+        // send as FormData to the endpoint
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 15000);
+        try {
+          const res = await fetch(endpoint, {
+            method: 'POST',
+            body: fd,
+            signal: controller.signal,
+          });
+          clearTimeout(timeout);
+          return res;
+        } catch (err) {
+          clearTimeout(timeout);
+          throw err;
+        }
+      }
+
+      form.addEventListener('submit', async function (e) {
+        e.preventDefault();
+
+        // Basic front-end validation
+        if (!form.checkValidity()) {
+          form.reportValidity();
+          return;
+        }
+
+        setLoading(true);
+        showMessage('info', 'Sending…', 'Please wait while we send your selection.');
+
+        const fd = new FormData(form);
+
+        try {
+          const res = await postForm(fd);
+
+          if (res.ok) {
+            // success
+            msgWrap.innerHTML = '';
+            const success = document.createElement('div');
+            success.className = 'notice success';
+            success.innerHTML = '<div style="display:flex;align-items:center;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div><strong style="display:block;margin-bottom:4px;">Success — data sent to the search engine</strong><div class="muted">Thanks. We received your choices and will follow up shortly with confirmation and recommendations.</div></div>';
+            msgWrap.appendChild(success);
+
+            // Optionally clear the form after a short delay (commented to keep user's data if you prefer)
+            // setTimeout(() => form.reset(), 900);
+
+          } else {
+            // server returned an error status
+            msgWrap.innerHTML = '';
+            const err = document.createElement('div');
+            err.className = 'notice error';
+            err.innerHTML = '<div style="display:flex;align-items:center;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 9v4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 17h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M21 12A9 9 0 1 0 3 12a9 9 0 0 0 18 0z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div><strong style="display:block;margin-bottom:4px;">Error — submission failed</strong><div class="muted">Sorry, there was a problem sending your data. Please try again later.</div></div>';
+            msgWrap.appendChild(err);
+          }
+
+        } catch (err) {
+          // network or other error
+          console.error(err);
+          msgWrap.innerHTML = '';
+          const errMsg = document.createElement('div');
+          errMsg.className = 'notice error';
+          errMsg.innerHTML = '<div style="display:flex;align-items:center;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 9v4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 17h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M21 12A9 9 0 1 0 3 12a9 9 0 0 0 18 0z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div><strong style="display:block;margin-bottom:4px;">Error — submission failed</strong><div class="muted">Sorry, there was a problem sending your data. Please check your connection and try again.</div></div>';
+          msgWrap.appendChild(errMsg);
+        } finally {
+          setLoading(false);
+        }
+      });
+    })();
+  </script>
 </body>
 
 </html>
