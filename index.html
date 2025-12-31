@@ -135,129 +135,133 @@
   </div>
 
   <script>
-  (function () {
-    const form = document.getElementById('rsvpForm');
-    const submitBtn = document.getElementById('submitBtn');
-    const msgWrap = document.getElementById('formMessage');
-    const endpoint = form.getAttribute('action');
+(function () {
+  const form = document.getElementById('rsvpForm');
+  const submitBtn = document.getElementById('submitBtn');
+  const msgWrap = document.getElementById('formMessage');
+  const endpoint = form.getAttribute('action');
 
-    function createNotice(type, title, htmlContent) {
-      const el = document.createElement('div');
-      el.className = 'notice ' + (type === 'success' ? 'success' : 'error');
-      el.innerHTML = '<div style="display:flex;align-items:center;"><span class="spinner" aria-hidden="true" style="display:none"></span></div><div><strong style="display:block;margin-bottom:4px;">' + title + '</strong><div class="muted">' + htmlContent + '</div></div>';
-      return el;
+  function setLoading(loading) {
+    if (loading) {
+      submitBtn.disabled = true;
+      submitBtn.dataset.orig = submitBtn.textContent;
+      submitBtn.innerHTML = '<span class="spinner" aria-hidden="true"></span> Sending...';
+    } else {
+      submitBtn.disabled = false;
+      submitBtn.textContent = submitBtn.dataset.orig || 'Find the best wine';
     }
+  }
 
-    function setLoading(loading) {
-      if (loading) {
-        submitBtn.disabled = true;
-        submitBtn.dataset.orig = submitBtn.textContent;
-        submitBtn.innerHTML = '<span class="spinner" aria-hidden="true"></span> Sending...';
+  async function postForm(fd) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+    try {
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        body: fd,
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+      return res;
+    } catch (err) {
+      clearTimeout(timeout);
+      throw err;
+    }
+  }
+
+  async function parseResponse(res) {
+    const ct = (res.headers.get('content-type') || '').toLowerCase();
+    try {
+      if (ct.includes('application/json')) {
+        const json = await res.json();
+        return { kind: 'json', value: json };
       } else {
-        submitBtn.disabled = false;
-        submitBtn.textContent = submitBtn.dataset.orig || 'Find the best wine';
+        const text = await res.text();
+        return { kind: 'text', value: text };
       }
+    } catch (err) {
+      return { kind: 'text', value: '' };
+    }
+  }
+
+  function escapeHtml(str) {
+    return String(str).replace(/[&<>"']/g, (m) => ({
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#39;'
+    })[m]);
+  }
+
+  function renderResponseContent(parsed) {
+    if (!parsed) return '';
+    if (parsed.kind === 'json') {
+      const pretty = JSON.stringify(parsed.value, null, 2);
+      return '<pre style="white-space:pre-wrap;max-height:420px;overflow:auto;padding:8px;border-radius:8px;background:#fcfdff;border:1px solid #eef6ff;margin:6px 0;font-size:13px;">' +
+             escapeHtml(pretty) + '</pre>';
+    }
+    // text (may be empty)
+    return '<pre style="white-space:pre-wrap;max-height:420px;overflow:auto;padding:8px;border-radius:8px;background:#fcfdff;border:1px solid #eef6ff;margin:6px 0;font-size:13px;">' +
+           escapeHtml(parsed.value || '(no response body)') + '</pre>';
+  }
+
+  // small helper to render a simple notice block (used only for errors/no-body cases)
+  function renderNotice(kind, title, detail) {
+    return '<div class="notice ' + (kind === 'success' ? 'success' : 'error') + '"><div><strong style="display:block;margin-bottom:4px;">' +
+           escapeHtml(title) + '</strong><div class="muted">' + escapeHtml(detail) + '</div></div></div>';
+  }
+
+  form.addEventListener('submit', async function (e) {
+    e.preventDefault();
+
+    if (!form.checkValidity()) {
+      form.reportValidity();
+      return;
     }
 
-    async function postForm(fd) {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 15000);
-      try {
-        const res = await fetch(endpoint, {
-          method: 'POST',
-          body: fd,
-          signal: controller.signal,
-        });
-        clearTimeout(timeout);
-        return res;
-      } catch (err) {
-        clearTimeout(timeout);
-        throw err;
-      }
-    }
+    setLoading(true);
+    // show a small sending indicator while waiting
+    msgWrap.innerHTML = '<div class="notice"><div style="display:flex;align-items:center;"><span class="spinner" aria-hidden="true"></span></div><div><strong style="display:block;margin-bottom:4px;">Sending…</strong><div class="muted">Please wait while we send your selection.</div></div></div>';
 
-    async function parseResponse(res) {
-      const ct = (res.headers.get('content-type') || '').toLowerCase();
-      try {
-        if (ct.includes('application/json')) {
-          const json = await res.json();
-          return { kind: 'json', value: json };
-        } else {
-          const text = await res.text();
-          return { kind: 'text', value: text };
-        }
-      } catch (err) {
-        return { kind: 'text', value: '' };
-      }
-    }
+    const fd = new FormData(form);
 
-    // pretty output helper
-    function renderResponseContent(parsed) {
-      if (!parsed) return '';
-      if (parsed.kind === 'json') {
-        // escape and pretty-print JSON
-        const pretty = JSON.stringify(parsed.value, null, 2);
-        return '<pre style="white-space:pre-wrap;max-height:220px;overflow:auto;padding:8px;border-radius:8px;background:#fcfdff;border:1px solid #eef6ff;margin:6px 0;font-size:13px;">' +
-               escapeHtml(pretty) + '</pre>';
-      }
-      // text or empty
-      return '<pre style="white-space:pre-wrap;max-height:220px;overflow:auto;padding:8px;border-radius:8px;background:#fcfdff;border:1px solid #eef6ff;margin:6px 0;font-size:13px;">' +
-             escapeHtml(String(parsed.value || '(no response body)')) + '</pre>';
-    }
+    try {
+      const res = await postForm(fd);
+      const parsed = await parseResponse(res);
 
-    // simple HTML escaper
-    function escapeHtml(str) {
-      return str.replace(/[&<>"']/g, (m) => ({
-        '&': '&amp;',
-        '<': '&lt;',
-        '>': '&gt;',
-        '"': '&quot;',
-        "'": '&#39;'
-      })[m]);
-    }
-
-    form.addEventListener('submit', async function (e) {
-      e.preventDefault();
-
-      if (!form.checkValidity()) {
-        form.reportValidity();
-        return;
-      }
-
-      setLoading(true);
+      // Clear initial message and show only webhook output
       msgWrap.innerHTML = '';
-      msgWrap.appendChild(createNotice('info', 'Sending…', 'Please wait while we send your selection.'));
 
-      const fd = new FormData(form);
+      // If the webhook returned any body, show only that body.
+      // If body is empty, show a concise notice with the HTTP status.
+      const bodyPresent = parsed && (
+        (parsed.kind === 'json' && Object.keys(parsed.value || {}).length > 0) ||
+        (parsed.kind === 'text' && String(parsed.value).trim().length > 0)
+      );
 
-      try {
-        const res = await postForm(fd);
-        const parsed = await parseResponse(res);
-
-        msgWrap.innerHTML = '';
-
+      if (bodyPresent) {
+        // show only the response body (no extra "success" text)
+        msgWrap.innerHTML = renderResponseContent(parsed);
+      } else {
+        // no body: show a short notice including status info
         if (res.ok) {
-          const contentHtml = renderResponseContent(parsed);
-          const success = createNotice('success', 'Success — data sent to the search engine', 'Thanks. We received your choices and will follow up shortly with confirmation and recommendations.' + contentHtml);
-          msgWrap.appendChild(success);
-          // optionally clear form: keep commented so data is preserved unless you explicitly want a reset
-          // form.reset();
+          msgWrap.innerHTML = renderNotice('success', 'Webhook returned no body', 'The webhook responded with status ' + res.status + '. No response body was returned.');
         } else {
-          // non-2xx: show server response body if provided
-          const contentHtml = renderResponseContent(parsed);
-          const err = createNotice('error', 'Submission failed — server returned ' + res.status + ' ' + (res.statusText || ''), 'There was a problem submitting your data. Please try again — your entries are preserved.' + contentHtml);
-          msgWrap.appendChild(err);
+          msgWrap.innerHTML = renderNotice('error', 'Webhook returned no body', 'Server responded with status ' + res.status + ' ' + (res.statusText || '') + '. No response body was returned.');
         }
-      } catch (networkError) {
-        msgWrap.innerHTML = '';
-        const err = createNotice('error', 'Network error', 'Unable to reach the server. Please check your connection and try again — your entries are preserved.');
-        msgWrap.appendChild(err);
-      } finally {
-        setLoading(false);
       }
-    });
-  })();
-  </script>
+
+    } catch (networkError) {
+      msgWrap.innerHTML = '';
+      // show fetch/network/CORS error details
+      msgWrap.innerHTML = renderNotice('error', 'Network error', 'Unable to reach the server. Details: ' + (networkError && networkError.message ? networkError.message : String(networkError)));
+    } finally {
+      setLoading(false);
+    }
+  });
+})();
+</script>
 </body>
 
   })();
