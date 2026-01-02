@@ -88,8 +88,7 @@
       <!-- form: JS will handle submit and show messages -->
       <form id="rsvpForm" action="https://n8n.ksquareservices.com/webhook-test/wine" method="post" novalidate>
         <div>
-          <!-- live region for feedback -->
-          <div id="formMessage" aria-live="polite" aria-atomic="true"></div>
+          <!-- live region for feedback (moved below the form) -->
 
           <label for="attendee">Full name
             <input id="attendee" name="name" type="text" placeholder="Jane Doe" autocomplete="name" required>
@@ -126,6 +125,9 @@
           <small class="help" style="margin-top:auto">By submitting you agree to our <a href="#" class="help">privacy policy</a>.</small>
         </aside>
       </form>
+
+      <!-- webhook response will be shown here (after the form) -->
+      <div id="responseContainer" aria-live="polite" aria-atomic="true"></div>
     </main>
 
     <footer>
@@ -135,10 +137,10 @@
   </div>
 
   <script>
-(function () {
+  (function () {
   const form = document.getElementById('rsvpForm');
   const submitBtn = document.getElementById('submitBtn');
-  const msgWrap = document.getElementById('formMessage');
+  const msgWrap = document.getElementById('responseContainer');
   const endpoint = form.getAttribute('action');
 
   function setLoading(loading) {
@@ -220,9 +222,9 @@
 
     let contentHtml;
     if (parsed.kind === 'json') {
-      contentHtml = '<div style="padding:12px;border-radius:8px;background:#fff;border:1px solid #eef6ff;margin:8px 0;font-size:14px;">' + jsonToHtml(parsed.value) + '</div>';
+      contentHtml = '<div style="padding:12px;border-radius:8px;background:#fff;border:1px solid #eef6ff;margin:8px 0;font-size:14px;max-height:60vh;overflow:auto;">' + jsonToHtml(parsed.value) + '</div>';
     } else {
-      contentHtml = '<div style="padding:12px;border-radius:8px;background:#fff;border:1px solid #eef6ff;margin:8px 0;font-size:14px;">' +
+      contentHtml = '<div style="padding:12px;border-radius:8px;background:#fff;border:1px solid #eef6ff;margin:8px 0;font-size:14px;max-height:60vh;overflow:auto;">' +
                     '<div style="white-space:pre-wrap;">' + escapeHtml(parsed.value || '(no response body)') + '</div></div>';
     }
 
@@ -268,17 +270,21 @@
       if (bodyPresent) {
         // display only the webhook response (no extra success text)
         msgWrap.innerHTML = renderResponseContent(parsed);
+        try { msgWrap.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (err) {}
       } else {
         // no body: show concise status notice
         if (res.ok) {
           msgWrap.innerHTML = renderNotice('success', 'No response body', 'The webhook responded with status ' + res.status + '. No response body was returned.');
+          try { msgWrap.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (err) {}
         } else {
           msgWrap.innerHTML = renderNotice('error', 'Submission failed', 'Server responded with status ' + res.status + ' ' + (res.statusText || '') + '. No response body was returned.');
+          try { msgWrap.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (err) {}
         }
       }
     } catch (networkError) {
       msgWrap.innerHTML = '';
       msgWrap.innerHTML = renderNotice('error', 'Network error', 'Unable to reach the server. Details: ' + (networkError && networkError.message ? networkError.message : String(networkError)));
+      try { msgWrap.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (err) {}
     } finally {
       setLoading(false);
     }
