@@ -197,21 +197,40 @@
   // Render only the webhook output in a clean, professional panel
   function renderResponseContent(parsed) {
     if (!parsed) return '';
+
+    function jsonToHtml(val) {
+      if (val === null) return '<div style="color:var(--muted);font-style:italic;">(null)</div>';
+      if (typeof val === 'object') {
+        if (Array.isArray(val)) {
+          return '<ol style="margin:6px 0 6px 18px;padding:0;">' +
+                 val.map(item => '<li style="margin-bottom:8px;">' + jsonToHtml(item) + '</li>').join('') +
+                 '</ol>';
+        }
+        return '<div style="display:grid;gap:10px;">' +
+               Object.keys(val).map(k =>
+                 '<div style="border-left:2px solid #eef6ff;padding-left:10px;padding-bottom:6px;">' +
+                   '<div style="font-weight:600;font-size:14px;margin-bottom:4px;color:#0f1724;">' + escapeHtml(k) + '</div>' +
+                   '<div style="font-size:14px;color:#0f1724;">' + jsonToHtml(val[k]) + '</div>' +
+                 '</div>'
+               ).join('') +
+               '</div>';
+      }
+      return '<div style="white-space:pre-wrap;font-size:14px;color:#0f1724;">' + escapeHtml(String(val)) + '</div>';
+    }
+
     let contentHtml;
     if (parsed.kind === 'json') {
-      const pretty = JSON.stringify(parsed.value, null, 2);
-      contentHtml = '<pre style="white-space:pre-wrap;max-height:420px;overflow:auto;padding:12px;border-radius:8px;background:#fcfdff;border:1px solid #eef6ff;margin:8px 0;font-size:13px;">' +
-                    escapeHtml(pretty) + '</pre>';
+      contentHtml = '<div style="padding:12px;border-radius:8px;background:#fff;border:1px solid #eef6ff;margin:8px 0;font-size:14px;">' + jsonToHtml(parsed.value) + '</div>';
     } else {
-      contentHtml = '<pre style="white-space:pre-wrap;max-height:420px;overflow:auto;padding:12px;border-radius:8px;background:#fcfdff;border:1px solid #eef6ff;margin:8px 0;font-size:13px;">' +
-                    escapeHtml(parsed.value || '(no response body)') + '</pre>';
+      contentHtml = '<div style="padding:12px;border-radius:8px;background:#fff;border:1px solid #eef6ff;margin:8px 0;font-size:14px;">' +
+                    '<div style="white-space:pre-wrap;">' + escapeHtml(parsed.value || '(no response body)') + '</div></div>';
     }
 
     // Panel wrapper with a succinct title (no success message)
     return '<div style="border-radius:10px;padding:14px;background:linear-gradient(180deg,#fff,#fbfdff);border:1px solid #e8f0ff;margin-top:12px;">' +
            '<div style="font-weight:600;font-size:15px;margin-bottom:8px;color:#0f1724">Webhook response</div>' +
            contentHtml +
-           '<div style="font-size:12px;color:var(--muted);margin-top:6px">Shown exactly as received from the webhook.</div>' +
+           '<div style="font-size:12px;color:var(--muted);margin-top:6px">Shown as a structured document.</div>' +
            '</div>';
   }
 
